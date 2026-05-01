@@ -15,6 +15,7 @@ import { collectMetrics, parseUsageOutput, storeUsageData, checkUpstream, collec
 import { createApproval, updateApproval } from '../bus/approval.js';
 import { createReminder, listReminders, ackReminder, pruneReminders } from '../bus/reminders.js';
 import { updateCronFire } from '../bus/cron-state.js';
+import { brainSearch, formatBrainSearchResults, type BrainSearchMode } from '../bus/brain-search.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { resolvePaths } from '../utils/paths.js';
@@ -696,6 +697,43 @@ busCommand
     const projectDir = env.projectRoot || env.frameworkRoot || process.cwd();
     const report = autoCommit(projectDir, opts.dryRun ?? false);
     console.log(JSON.stringify(report));
+  });
+
+busCommand
+  .command('brain-search')
+  .description('Semantic search of the second-brain via qmd. B1 read-bridge — any agent can query the org memory layer.')
+  .argument('<query>', 'Query string (free-text question or keywords)')
+  .option('--mode <mode>', "Search mode: 'query' (hybrid, default) | 'search' (BM25 lex) | 'vsearch' (vector only)", 'query')
+  .option('-n, --max <n>', 'Max results', '5')
+  .option('--format <fmt>', "Output format: 'json' (default, agent-parseable) | 'text' (human-readable)", 'json')
+  .action((query: string, opts: { mode?: string; max?: string; format?: string }) => {
+    const validModes: BrainSearchMode[] = ['query', 'search', 'vsearch'];
+    const mode = (opts.mode ?? 'query') as BrainSearchMode;
+    if (!validModes.includes(mode)) {
+      console.error(`brain-search: invalid --mode "${opts.mode}". Must be one of: ${validModes.join(', ')}`);
+      process.exit(2);
+    }
+    const max = parseInt(opts.max ?? '5', 10);
+    if (isNaN(max) || max < 1) {
+      console.error(`brain-search: invalid --max "${opts.max}". Must be a positive integer.`);
+      process.exit(2);
+    }
+    const format = opts.format ?? 'json';
+    if (format !== 'json' && format !== 'text') {
+      console.error(`brain-search: invalid --format "${opts.format}". Must be 'json' or 'text'.`);
+      process.exit(2);
+    }
+    try {
+      const results = brainSearch(query, { mode, maxResults: max });
+      if (format === 'text') {
+        console.log(formatBrainSearchResults(results));
+      } else {
+        console.log(JSON.stringify(results, null, 2));
+      }
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(1);
+    }
   });
 
 busCommand
