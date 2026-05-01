@@ -24,25 +24,25 @@
       "name": "nightly-metrics",
       "type": "recurring",
       "interval": "24h",
-      "prompt": "Run nightly metrics collection: cortextos bus collect-metrics. Review the output and report any anomalies via Telegram to the orchestrator."
+      "prompt": "Run nightly metrics collection: cortextos bus collect-metrics. Review the output and report any anomalies via Telegram to the orchestrator. Then record this fire: cortextos bus update-cron-fire nightly-metrics --interval 24h"
     },
     {
       "name": "auto-commit",
       "type": "recurring",
       "interval": "24h",
-      "prompt": "Read .claude/skills/local-version-control/SKILL.md and execute the daily version control workflow. Stage, review, and commit changes."
+      "prompt": "Read .claude/skills/local-version-control/SKILL.md and execute the daily version control workflow. Stage, review, and commit changes. Then record this fire: cortextos bus update-cron-fire auto-commit --interval 24h"
     },
     {
       "name": "check-upstream",
       "type": "recurring",
       "interval": "24h",
-      "prompt": "Read .claude/skills/upstream-sync/SKILL.md and execute the upstream sync workflow. Check for framework updates and report to the orchestrator."
+      "prompt": "Read .claude/skills/upstream-sync/SKILL.md and execute the upstream sync workflow. Check for framework updates and report to the orchestrator. Then record this fire: cortextos bus update-cron-fire check-upstream --interval 24h"
     },
     {
       "name": "catalog-browse",
       "type": "recurring",
       "interval": "7d",
-      "prompt": "Read .claude/skills/catalog-browse/SKILL.md and execute the catalog browse workflow. Check for new community skills and recommend useful ones."
+      "prompt": "Read .claude/skills/catalog-browse/SKILL.md and execute the catalog browse workflow. Check for new community skills and recommend useful ones. Then record this fire: cortextos bus update-cron-fire catalog-browse --interval 7d"
     }
   ],
   "ecosystem": {

@@ -456,9 +456,41 @@ busCommand
       }
     }
 
+    // Auto-resolve timezone, day_mode_start, day_mode_end from agent config
+    // (preferred) with fallback to org context.json. CLI flag (--timezone)
+    // remains an override. Fixes: agents previously fell back to UTC for
+    // mode detection, and detectDayNightMode hardcoded 8-22 ignoring config.
+    let timezone = opts.timezone;
+    let dayStart: string | undefined;
+    let dayEnd: string | undefined;
+    if (frameworkRoot) {
+      const agentCfgPath = join(frameworkRoot, 'orgs', env.org, 'agents', env.agentName, 'config.json');
+      if (existsSync(agentCfgPath)) {
+        try {
+          const cfg = JSON.parse(readFileSync(agentCfgPath, 'utf-8'));
+          if (!timezone && typeof cfg.timezone === 'string') timezone = cfg.timezone;
+          if (typeof cfg.day_mode_start === 'string') dayStart = cfg.day_mode_start;
+          if (typeof cfg.day_mode_end === 'string') dayEnd = cfg.day_mode_end;
+        } catch { /* skip on parse error */ }
+      }
+      if (!timezone || !dayStart || !dayEnd) {
+        const orgCtxPath = join(frameworkRoot, 'orgs', env.org, 'context.json');
+        if (existsSync(orgCtxPath)) {
+          try {
+            const ctx = JSON.parse(readFileSync(orgCtxPath, 'utf-8'));
+            if (!timezone && typeof ctx.timezone === 'string') timezone = ctx.timezone;
+            if (!dayStart && typeof ctx.day_mode_start === 'string') dayStart = ctx.day_mode_start;
+            if (!dayEnd && typeof ctx.day_mode_end === 'string') dayEnd = ctx.day_mode_end;
+          } catch { /* skip on parse error */ }
+        }
+      }
+    }
+
     updateHeartbeat(paths, env.agentName, status, {
       org: env.org,
-      timezone: opts.timezone,
+      timezone,
+      dayStart,
+      dayEnd,
       loopInterval: opts.interval,
       currentTask: opts.task,
       displayName,

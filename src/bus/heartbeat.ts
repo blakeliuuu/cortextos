@@ -12,12 +12,24 @@ export function updateHeartbeat(
   paths: BusPaths,
   agentName: string,
   status: string,
-  options?: { org?: string; timezone?: string; loopInterval?: string; currentTask?: string; displayName?: string },
+  options?: {
+    org?: string;
+    timezone?: string;
+    dayStart?: string;
+    dayEnd?: string;
+    loopInterval?: string;
+    currentTask?: string;
+    displayName?: string;
+  },
 ): void {
   ensureDir(paths.stateDir);
 
   const ts = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const mode = options?.timezone ? detectDayNightMode(options.timezone) : detectDayNightMode('UTC');
+  const mode = detectDayNightMode(
+    options?.timezone ?? 'UTC',
+    options?.dayStart,
+    options?.dayEnd,
+  );
 
   const heartbeat: Heartbeat = {
     agent: agentName,
@@ -37,19 +49,51 @@ export function updateHeartbeat(
 }
 
 /**
- * Detect day/night mode based on timezone.
- * Day: 8:00 - 22:00, Night: 22:00 - 8:00
+ * Parse "HH:MM" or "HH" into the hour integer 0-23.
+ * Returns the fallback if the input is missing or unparseable.
+ * "00:00" parses as 0 (midnight); inDayWindow handles it as end-of-day.
  */
-export function detectDayNightMode(timezone: string): 'day' | 'night' {
+export function parseHour(input: string | undefined, fallback: number): number {
+  if (!input) return fallback;
+  const m = /^(\d{1,2})(?::\d{1,2})?$/.exec(input.trim());
+  if (!m) return fallback;
+  const h = parseInt(m[1], 10);
+  return (h >= 0 && h <= 23) ? h : fallback;
+}
+
+/**
+ * True if `hour` (0-23) falls inside [start, end).
+ * - Standard window: start < end, e.g. 8..22 → 8 <= hour < 22
+ * - Wrap-around window: start > end, e.g. 22..6 → hour >= 22 || hour < 6
+ * - End-as-midnight: end === 0 means "until midnight" → hour >= start (anything from start through 23 is "day")
+ */
+export function inDayWindow(hour: number, start: number, end: number): boolean {
+  if (end === 0) return hour >= start;
+  if (start <= end) return hour >= start && hour < end;
+  return hour >= start || hour < end;
+}
+
+/**
+ * Detect day/night mode based on timezone and optional org day window.
+ * Defaults to 8:00–22:00 if dayStart/dayEnd are not provided.
+ * Accepts "HH" or "HH:MM" for start/end (e.g. "06:00", "22:00", "00:00" for midnight).
+ */
+export function detectDayNightMode(
+  timezone: string,
+  dayStart?: string,
+  dayEnd?: string,
+): 'day' | 'night' {
+  const startH = parseHour(dayStart, 8);
+  const endH = parseHour(dayEnd, 22);
   try {
     const now = new Date();
     const formatted = now.toLocaleString('en-US', { timeZone: timezone, hour12: false, hour: '2-digit' });
     const hour = parseInt(formatted, 10);
-    return (hour >= 8 && hour < 22) ? 'day' : 'night';
+    return inDayWindow(hour, startH, endH) ? 'day' : 'night';
   } catch {
     // Fallback to UTC
     const hour = new Date().getUTCHours();
-    return (hour >= 8 && hour < 22) ? 'day' : 'night';
+    return inDayWindow(hour, startH, endH) ? 'day' : 'night';
   }
 }
 

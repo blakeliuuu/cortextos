@@ -24,25 +24,25 @@
       "name": "check-approvals",
       "type": "recurring",
       "interval": "2h",
-      "prompt": "Check for pending approvals and human tasks. (1) cortextos bus list-approvals --format json — for any pending approval older than 1h, send user a Telegram reminder. (2) cortextos bus list-tasks --project human-tasks --status pending — for any [HUMAN] task pending >4h, send user a Telegram reminder with the task title and what's blocked. ACK any approval/human-task inbox messages."
+      "prompt": "Check for pending approvals and human tasks. (1) cortextos bus list-approvals --format json — for any pending approval older than 1h, send user a Telegram reminder. (2) cortextos bus list-tasks --project human-tasks --status pending — for any [HUMAN] task pending >4h, send user a Telegram reminder with the task title and what's blocked. ACK any approval/human-task inbox messages. Then record this fire: cortextos bus update-cron-fire check-approvals --interval 2h"
     },
     {
       "name": "morning-review",
       "type": "recurring",
       "cron": "0 8 * * *",
-      "prompt": "Read .claude/skills/morning-review/SKILL.md and execute the full morning review workflow. Include goal cascade from .claude/skills/goal-management/SKILL.md."
+      "prompt": "Read .claude/skills/morning-review/SKILL.md and execute the full morning review workflow. Include goal cascade from .claude/skills/goal-management/SKILL.md. Then record this fire: cortextos bus update-cron-fire morning-review --interval 24h"
     },
     {
       "name": "evening-review",
       "type": "recurring",
       "cron": "0 18 * * *",
-      "prompt": "Read .claude/skills/evening-review/SKILL.md and execute the full evening review workflow. Summarize the day, propose overnight tasks, queue nighttime work."
+      "prompt": "Read .claude/skills/evening-review/SKILL.md and execute the full evening review workflow. Summarize the day, propose overnight tasks, queue nighttime work. Then record this fire: cortextos bus update-cron-fire evening-review --interval 24h"
     },
     {
       "name": "weekly-review",
       "type": "recurring",
       "cron": "0 8 * * 0",
-      "prompt": "Read .claude/skills/weekly-review/SKILL.md and run the full weekly review. Review all agent outputs, evaluate performance, plan next week."
+      "prompt": "Read .claude/skills/weekly-review/SKILL.md and run the full weekly review. Review all agent outputs, evaluate performance, plan next week. Then record this fire: cortextos bus update-cron-fire weekly-review --interval 7d"
     }
   ],
   "ecosystem": {

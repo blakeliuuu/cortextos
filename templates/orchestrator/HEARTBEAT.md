@@ -80,6 +80,16 @@ Full reference: `.claude/skills/event-logging/SKILL.md`
 cortextos bus log-event heartbeat agent_heartbeat info --meta '{"agent":"'$CTX_AGENT_NAME'"}'
 ```
 
+## Step 4b: Record cron fire (REQUIRED — silences gap-detector nudges)
+
+The daemon's gap detector reads `state/<agent>/cron-state.json`. If this file is never updated, the detector falls back to daemon-start time and floods nudges every 10 minutes after 2× the cron interval. Always record this heartbeat's fire:
+
+```bash
+cortextos bus update-cron-fire heartbeat --interval 4h
+```
+
+If you skip this step, "[SYSTEM] Cron gap detected for heartbeat..." nudges flood the REPL within 8 hours. (Same applies to every other recurring cron — append `cortextos bus update-cron-fire <name> --interval <interval>` at the end of each cron prompt.)
+
 ## Step 5: Write daily memory
 
 Full reference: `.claude/skills/memory/SKILL.md`
