@@ -16,6 +16,7 @@ import { createApproval, updateApproval } from '../bus/approval.js';
 import { createReminder, listReminders, ackReminder, pruneReminders } from '../bus/reminders.js';
 import { updateCronFire } from '../bus/cron-state.js';
 import { brainSearch, formatBrainSearchResults, type BrainSearchMode } from '../bus/brain-search.js';
+import { brainWrite, VALID_PARA_DESTINATIONS, type ParaDestination } from '../bus/brain-write.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { resolvePaths } from '../utils/paths.js';
@@ -697,6 +698,50 @@ busCommand
     const projectDir = env.projectRoot || env.frameworkRoot || process.cwd();
     const report = autoCommit(projectDir, opts.dryRun ?? false);
     console.log(JSON.stringify(report));
+  });
+
+busCommand
+  .command('brain-write')
+  .description('Capture a new markdown entry into the second-brain. B2 write-bridge — agents write new files, never modify existing ones.')
+  .requiredOption('--title <title>', 'Title (also slugified for filename)')
+  .option('--content <content>', "Markdown body. If omitted, reads from stdin.")
+  .option('--destination <dest>', `PARA destination. One of: ${VALID_PARA_DESTINATIONS.join(', ')}. Default 00-inbox.`, '00-inbox')
+  .option('--subfolder <path>', 'Optional subfolder under destination (relative, no path traversal)')
+  .option('--tags <csv>', 'Comma-separated tags (e.g. "ai-tools,opportunity")')
+  .action(async (opts: { title: string; content?: string; destination?: string; subfolder?: string; tags?: string }) => {
+    const dest = (opts.destination ?? '00-inbox') as ParaDestination;
+    if (!VALID_PARA_DESTINATIONS.includes(dest)) {
+      console.error(`brain-write: invalid --destination "${opts.destination}". Must be one of: ${VALID_PARA_DESTINATIONS.join(', ')}`);
+      process.exit(2);
+    }
+
+    let content = opts.content;
+    if (content === undefined) {
+      // Read from stdin
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      }
+      content = Buffer.concat(chunks).toString('utf-8');
+    }
+
+    const tags = opts.tags
+      ? opts.tags.split(',').map(t => t.trim()).filter(t => t.length > 0)
+      : [];
+
+    try {
+      const result = brainWrite({
+        title: opts.title,
+        content,
+        destination: dest,
+        subfolder: opts.subfolder,
+        tags,
+      });
+      console.log(JSON.stringify({ status: 'created', ...result }));
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(1);
+    }
   });
 
 busCommand
