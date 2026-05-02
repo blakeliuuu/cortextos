@@ -17,6 +17,7 @@ import { createReminder, listReminders, ackReminder, pruneReminders } from '../b
 import { updateCronFire } from '../bus/cron-state.js';
 import { brainSearch, formatBrainSearchResults, type BrainSearchMode } from '../bus/brain-search.js';
 import { brainWrite, VALID_PARA_DESTINATIONS, type ParaDestination } from '../bus/brain-write.js';
+import { snapshotAgents } from '../bus/snapshot-agents.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { resolvePaths } from '../utils/paths.js';
@@ -698,6 +699,32 @@ busCommand
     const projectDir = env.projectRoot || env.frameworkRoot || process.cwd();
     const report = autoCommit(projectDir, opts.dryRun ?? false);
     console.log(JSON.stringify(report));
+  });
+
+busCommand
+  .command('snapshot-agents')
+  .description("Hourly git snapshot of agent workspace state into $CTX_ROOT/snapshots/<org>/. Local only — never pushes. Reversible via standard git operations on the snapshot repo.")
+  .action(() => {
+    const env = resolveEnv();
+    if (!env.frameworkRoot) {
+      console.error('snapshot-agents: CTX_FRAMEWORK_ROOT is required (cannot infer framework root)');
+      process.exit(2);
+    }
+    if (!env.org) {
+      console.error('snapshot-agents: CTX_ORG is required');
+      process.exit(2);
+    }
+    try {
+      const result = snapshotAgents({
+        frameworkRoot: env.frameworkRoot,
+        ctxRoot: env.ctxRoot,
+        org: env.org,
+      });
+      console.log(JSON.stringify(result));
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(1);
+    }
   });
 
 busCommand
