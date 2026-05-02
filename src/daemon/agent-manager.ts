@@ -277,6 +277,12 @@ export class AgentManager {
     // and nudges the agent if any cron has been silent >2x its expected interval.
     agentProcess.scheduleGapDetection();
 
+    // Start daemon-side mirror cron scheduler: writes cron-state.json on
+    // schedule independently of agent CronCreate, so gap nudges don't flood
+    // after a --continue restart. Does not inject prompts (Claude Code's
+    // CronCreate continues to do that).
+    agentProcess.startMirrorCronScheduler();
+
     // Start fast checker in background
     checker.start().catch(err => {
       console.error(`[${name}] Fast checker error:`, err);

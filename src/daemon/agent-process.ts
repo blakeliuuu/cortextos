@@ -10,6 +10,7 @@ import { writeCortextosEnv } from '../utils/env.js';
 import { getOverdueReminders } from '../bus/reminders.js';
 import { readCronState, parseDurationMs, cronExpressionMinIntervalMs } from '../bus/cron-state.js';
 import { resolvePaths } from '../utils/paths.js';
+import { makeDaemonCronScheduler, type DaemonCronScheduler } from './cron-scheduler.js';
 
 type LogFn = (msg: string) => void;
 
@@ -47,6 +48,11 @@ export class AgentProcess {
   // Guard: only one cron verification waiter in-flight per agent at a time.
   // Rapid --continue restarts must not stack duplicate waiters. (Issue #182)
   private cronVerificationPending: boolean = false;
+  // Daemon-side mirror cron scheduler — records cron-state.json on the
+  // same schedule as Claude Code's in-process CronCreate. Eliminates gap
+  // nudges that fire after --continue restarts when the agent's recorded
+  // state is empty.
+  private mirrorScheduler: DaemonCronScheduler | null = null;
   // BUG-011 fix: stop() awaits this promise (resolved by the onExit handler in start())
   // to guarantee the PTY exit has fired before stopping=false is reset. Without
   // this, the exit handler can fire after stopping=false and trigger spurious
@@ -169,6 +175,13 @@ export class AgentProcess {
     this.stopRequested = true;
     this.log('Stopping...');
     this.clearSessionTimer();
+    // Stop the mirror cron scheduler so its timers don't keep firing after
+    // the agent process exits. agent-manager will call startMirrorCronScheduler
+    // again on the next start(). Safe to call when null.
+    if (this.mirrorScheduler) {
+      this.mirrorScheduler.stop();
+      this.mirrorScheduler = null;
+    }
 
     // Capture and null out pty BEFORE any awaits so handleExit() during graceful
     // shutdown doesn't race with us and trigger crash recovery or a double-kill.
@@ -739,6 +752,33 @@ export class AgentProcess {
     this.runGapDetectionLoop(monitorable, generation, loopStartedAt).catch(err => {
       this.log(`Cron gap detection failed (non-fatal): ${err}`);
     });
+  }
+
+  /**
+   * Start the daemon-side mirror cron scheduler. Records fires to
+   * cron-state.json on the same schedule as the agent's in-process
+   * CronCreate, but does NOT inject prompts (Claude Code still does).
+   *
+   * Effect: cron-state.json stays accurate across --continue restarts and
+   * sessions where the agent forgets to call update-cron-fire. Gap nudges
+   * stop firing falsely.
+   *
+   * Stopped automatically by stop() / restart().
+   */
+  startMirrorCronScheduler(): void {
+    if (this.mirrorScheduler) {
+      // Already running (defensive — agent-manager only calls once per start)
+      return;
+    }
+    this.mirrorScheduler = makeDaemonCronScheduler(
+      this.env.ctxRoot,
+      this.name,
+      this.config.crons,
+      (msg) => this.log(msg),
+    );
+    if (this.mirrorScheduler) {
+      this.mirrorScheduler.start();
+    }
   }
 
   private async runGapDetectionLoop(
