@@ -43,3 +43,6 @@ next-env.d.ts
 
 # SQLite database
 .data/
+
+# Tailscale TLS certs (provisioned by `tailscale cert <hostname>` per HTTPS.md)
+/certs/
