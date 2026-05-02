@@ -46,7 +46,7 @@ export default function LoginPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/auth/csrf', { credentials: 'same-origin' });
+        const res = await fetch('/api/auth/csrf', { credentials: 'include' });
         const data = await res.json();
         if (cancelled) return;
         const token = data?.csrfToken;
@@ -90,7 +90,7 @@ export default function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
-        credentials: 'same-origin',
+        credentials: 'include',
         redirect: 'follow',
       });
       if (res.redirected) {
