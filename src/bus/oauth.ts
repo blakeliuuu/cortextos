@@ -12,9 +12,10 @@
  * - Usage cache TTL = 3 minutes (API rate limit ~5 req/token)
  */
 
-import { existsSync, readFileSync, chmodSync } from 'fs';
+import { existsSync, readFileSync, chmodSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { execSync } from 'child_process';
 import { atomicWriteSync, ensureDir } from '../utils/atomic.js';
 
 // --- Types ---
@@ -217,6 +218,8 @@ export async function checkUsageApi(
   }
 
   const data = await response.json() as {
+    five_hour?: { utilization?: number; resets_at?: string };
+    seven_day?: { utilization?: number; resets_at?: string };
     five_hour_utilization?: number;
     seven_day_utilization?: number;
     fiveHourUtilization?: number;
@@ -229,8 +232,10 @@ export async function checkUsageApi(
     return v > 1 ? v / 100 : v;
   };
 
-  const fiveHour = normalize(data.five_hour_utilization ?? data.fiveHourUtilization);
-  const sevenDay = normalize(data.seven_day_utilization ?? data.sevenDayUtilization);
+  const rawFiveHour = data.five_hour?.utilization ?? data.five_hour_utilization ?? data.fiveHourUtilization;
+  const rawSevenDay = data.seven_day?.utilization ?? data.seven_day_utilization ?? data.sevenDayUtilization;
+  const fiveHour = normalize(rawFiveHour);
+  const sevenDay = normalize(rawSevenDay);
   const fetchedAt = new Date().toISOString();
 
   const snapshot: UsageSnapshot = {
@@ -469,4 +474,83 @@ function writeTokenToAgents(
       try { chmodSync(envPath, 0o600); } catch { /* ignore */ }
     } catch { /* skip agents whose .env we can't write */ }
   }
+}
+
+// --- sync-oauth-keychain ---
+
+interface KeychainCredentials {
+  claudeAiOauth?: {
+    accessToken?: string;
+    refreshToken?: string;
+    expiresAt?: number;
+    subscriptionType?: string;
+    rateLimitTier?: string;
+  };
+}
+
+/**
+ * Sync OAuth credentials from the macOS Keychain (where Claude Code stores them)
+ * into accounts.json. Claude Code auto-refreshes its keychain entry, so this
+ * keeps cortextOS in sync without needing its own refresh flow.
+ */
+export function syncOAuthKeychain(
+  ctxRoot: string,
+  accountName?: string,
+): { synced: boolean; account: string; expires_at: number } {
+  if (process.platform !== 'darwin') {
+    throw new Error('Keychain sync is only supported on macOS');
+  }
+
+  let raw: string;
+  try {
+    raw = execSync(
+      'security find-generic-password -s "Claude Code-credentials" -w',
+      { encoding: 'utf-8', timeout: 5000 },
+    ).trim();
+  } catch {
+    throw new Error('Could not read Claude Code credentials from macOS Keychain');
+  }
+
+  let creds: KeychainCredentials;
+  try {
+    creds = JSON.parse(raw);
+  } catch {
+    throw new Error('Keychain entry is not valid JSON');
+  }
+
+  const oauth = creds.claudeAiOauth;
+  if (!oauth?.accessToken) {
+    throw new Error('Keychain entry missing claudeAiOauth.accessToken');
+  }
+
+  const name = accountName || 'primary';
+  const dir = oauthDir(ctxRoot);
+  ensureDir(dir);
+
+  let store = loadAccounts(ctxRoot);
+  if (!store) {
+    store = { active: name, accounts: {}, rotation_log: [] };
+  }
+
+  const existing = store.accounts[name];
+  const tokenChanged = !existing || existing.access_token !== oauth.accessToken;
+
+  store.accounts[name] = {
+    label: existing?.label || `${oauth.subscriptionType || 'claude'} (keychain)`,
+    access_token: oauth.accessToken,
+    refresh_token: oauth.refreshToken || existing?.refresh_token || '',
+    expires_at: oauth.expiresAt || Date.now() + 3600_000,
+    last_refreshed: new Date().toISOString(),
+    five_hour_utilization: existing?.five_hour_utilization ?? 0,
+    seven_day_utilization: existing?.seven_day_utilization ?? 0,
+  };
+
+  if (!store.active) store.active = name;
+  saveAccounts(ctxRoot, store);
+
+  return {
+    synced: tokenChanged,
+    account: name,
+    expires_at: store.accounts[name].expires_at,
+  };
 }

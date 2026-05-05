@@ -21,7 +21,7 @@ import { snapshotAgents } from '../bus/snapshot-agents.js';
 import { addCron, removeCron, readCrons, updateCron as updateCronDef, getCronByName, getExecutionLog } from '../bus/crons.js';
 import { nextFireFromCron } from '../daemon/cron-scheduler.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
-import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
+import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, syncOAuthKeychain, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
 import { IPCClient } from '../daemon/ipc-server.js';
@@ -2633,6 +2633,26 @@ busCommand
       const warn7d = acct.seven_day_utilization >= ALERT_7D ? ' ⚠️' : '';
       console.log(`${name}${active}`);
       console.log(`  5h: ${pct(acct.five_hour_utilization)}${warn5h}  7d: ${pct(acct.seven_day_utilization)}${warn7d}  expires: ${expiry}`);
+    }
+  });
+
+busCommand
+  .command('sync-oauth-keychain')
+  .description('Sync OAuth token from macOS Keychain (where Claude Code stores it) into accounts.json')
+  .option('--account <name>', 'Account name to update', 'primary')
+  .action((opts: { account: string }) => {
+    const env = resolveEnv();
+    try {
+      const result = syncOAuthKeychain(env.ctxRoot, opts.account);
+      if (result.synced) {
+        console.log(`Synced: token updated for "${result.account}"`);
+      } else {
+        console.log(`No change: keychain token matches "${result.account}"`);
+      }
+      console.log(`Expires: ${new Date(result.expires_at).toISOString()}`);
+    } catch (e: unknown) {
+      console.error(`Error: ${(e as Error).message}`);
+      process.exit(1);
     }
   });
 
