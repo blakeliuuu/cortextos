@@ -40,6 +40,10 @@ ${APPDATA}/
 knowledge-base/venv/
 knowledge-base/__pycache__/
 knowledge-base/scripts/__pycache__/
+
+# Graphify scratch output (regenerated on demand)
+day3-knowledge-graph.json
+graph-output.json
 tests/playwright/dashboard-ui.spec.ts
 
 # Local ops docs (personal, not for public repo)
@@ -51,5 +55,6 @@ WINDOWS-IMPLEMENTATION-PLAN.md
 WINDOWS-SUPPORT-INVESTIGATION.md
 BRAINDUMP*.md
 AGENTS.md
+DISPATCHER-PROFILING-FINDINGS.md
 dashboard/screenshots/
 dashboard/test-*.py
