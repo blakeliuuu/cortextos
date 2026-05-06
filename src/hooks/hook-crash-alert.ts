@@ -326,7 +326,14 @@ async function main(): Promise<void> {
       lastTask,
       crashCount,
       restartAttempted,
-      recipients: ['chief', 'analyst'],
+      // LOCAL PATCH 2026-05-06: upstream hardcodes 'chief' as the orchestrator
+      // name; our org's orchestrator is 'chiefjarvis'. Verified live:
+      // `cortextos bus send-message chief ...` returns "agent not found in
+      // project" — without this patch, half the crash-notification chain
+      // silently fails. Upstream PR drafted (analyst outputs/) to make this
+      // org-aware via context.json's `orchestrator` field; revert this patch
+      // once that lands.
+      recipients: ['chiefjarvis', 'analyst'],
     });
   }
 }
