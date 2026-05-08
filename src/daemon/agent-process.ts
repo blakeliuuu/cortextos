@@ -274,9 +274,28 @@ export class AgentProcess {
    * AFTER the NEW pty was set up, nulling out the wrong reference.
    * `start()` will pick up `continue` mode automatically because the
    * conversation directory still has .jsonl files (shouldContinue() is true).
+   *
+   * Writes `.session-refresh` marker BEFORE stop() so the SessionEnd
+   * crash-alert hook classifies the exit as `session-refresh` (suppressed
+   * during quiet hours, no bus-level crash notification, no crash count
+   * increment) instead of falling through to `crash`. Without this marker,
+   * any caller that triggered sessionRefresh — most notably the
+   * session-time-limit timer below at scheduleCheck() — produced a
+   * false-positive 🚨 CRASH alert. fast-checker.forceContextRestart()
+   * already writes `.restart-planned` for its own path; this protects every
+   * other caller in one place.
    */
   async sessionRefresh(): Promise<void> {
     this.log('Session refresh (--continue restart)');
+    try {
+      const stateDir = join(this.env.ctxRoot, 'state', this.name);
+      ensureDir(stateDir);
+      writeFileSync(
+        join(stateDir, '.session-refresh'),
+        'session-refresh: --continue restart\n',
+        'utf-8',
+      );
+    } catch { /* non-fatal — worst case is one false-positive crash alert */ }
     await this.stop();
     await this.start();
     this.log('Session refreshed');

@@ -248,6 +248,32 @@ describe('AgentProcess - BUG-011 fix (stop awaits PTY exit)', () => {
     const startOrder = startSpy.mock.invocationCallOrder[0];
     expect(stopOrder).toBeLessThan(startOrder);
   });
+
+  it('sessionRefresh() writes .session-refresh marker before stop() so crash-alert hook does not fall through to "crash"', async () => {
+    const ap = new AgentProcess('alice', mockEnv, {});
+    await ap.start();
+
+    fsMocks.writeFileSync.mockClear();
+
+    let markerWrittenAtStopCall = false;
+    const stopSpy = vi.spyOn(ap, 'stop').mockImplementation(async () => {
+      // Capture whether the marker write happened before stop() ran
+      markerWrittenAtStopCall = fsMocks.writeFileSync.mock.calls.some(
+        (c: any) => String(c[0]).endsWith('/.session-refresh'),
+      );
+    });
+    vi.spyOn(ap, 'start').mockResolvedValue();
+
+    await ap.sessionRefresh();
+
+    expect(markerWrittenAtStopCall).toBe(true);
+    expect(stopSpy).toHaveBeenCalled();
+    const markerWrite = fsMocks.writeFileSync.mock.calls.find(
+      (c: any) => String(c[0]).endsWith('/.session-refresh'),
+    );
+    expect(markerWrite).toBeDefined();
+    expect(String(markerWrite![0])).toContain('/state/alice/.session-refresh');
+  });
 });
 
 describe('AgentProcess - BUG-048 fix (session timer re-reads config)', () => {
