@@ -353,6 +353,53 @@ export class TelegramAPI {
   }
 
   /**
+   * Send a voice message (.ogg opus) to a chat.
+   * Telegram requires opus-encoded .ogg files for voice messages.
+   */
+  async sendVoice(
+    chatId: string | number,
+    voicePath: string,
+    caption?: string,
+  ): Promise<any> {
+    if (!existsSync(voicePath)) {
+      throw new Error(`Voice file not found: ${voicePath}`);
+    }
+
+    await this.rateLimit(String(chatId));
+
+    const fileData = readFileSync(voicePath);
+    const fileName = basename(voicePath);
+
+    const formData = new FormData();
+    formData.append('chat_id', String(chatId));
+    formData.append('voice', new Blob([fileData]), fileName);
+    if (caption) {
+      formData.append('caption', caption);
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/sendVoice`, {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(60000),
+      });
+      const result = await response.json() as any;
+      if (!result.ok) {
+        throw new Error(`Telegram API error: ${result.description || 'Unknown error'}`);
+      }
+      return result;
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Telegram API error')) {
+        throw err;
+      }
+      if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        throw new Error(`Telegram API request timed out after 60s: sendVoice`);
+      }
+      throw new Error(`Telegram API request failed: ${err}`);
+    }
+  }
+
+  /**
    * Get updates via long polling.
    */
   async getUpdates(offset: number, timeout: number = 1): Promise<any> {
