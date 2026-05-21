@@ -27,6 +27,7 @@ import { resolveEnv } from '../utils/env.js';
 import { IPCClient } from '../daemon/ipc-server.js';
 import { TelegramAPI } from '../telegram/api.js';
 import { logOutboundMessage, cacheLastSent } from '../telegram/logging.js';
+import { textToSpeech } from '../telegram/tts.js';
 import type { Priority, Task, TaskStatus, EventCategory, EventSeverity, ApprovalCategory, ApprovalStatus, OrgContext, CronDefinition } from '../types/index.js';
 
 /**
@@ -1135,6 +1136,24 @@ busCommand
           parseMode: opts.plainText ? null : 'HTML',
         });
         sentMessageId = result?.result?.message_id ?? 0;
+      }
+
+      // TTS voice output: convert the text response to a voice message
+      // Gated by CTX_TELEGRAM_TTS_ENABLED=1 — default off, purely additive.
+      if (process.env.CTX_TELEGRAM_TTS_ENABLED === '1' && !opts.image && !opts.file) {
+        try {
+          const ttsLog = (line: string) => { if (process.env.CTX_DEBUG) console.error(line); };
+          const ttsResult = await textToSpeech(message, { log: ttsLog });
+          if (ttsResult.ok && ttsResult.oggPath) {
+            await api.sendVoice(chatId, ttsResult.oggPath);
+            try { require('fs').unlinkSync(ttsResult.oggPath); } catch { /* ignore */ }
+          }
+        } catch (err: any) {
+          // TTS failure must never block the text message flow
+          if (process.env.CTX_DEBUG) {
+            console.error(`[tts] voice send failed: ${err.message || err}`);
+          }
+        }
       }
 
       // Log outbound and cache last-sent for context injection
